@@ -11,16 +11,25 @@ import android.widget.EditText;
 import android.widget.TextView;
 
 import com.google.gson.Gson;
+import com.orhanobut.logger.AndroidLogAdapter;
+import com.orhanobut.logger.Logger;
 
 
 import org.jetbrains.annotations.NotNull;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
 
 
 import okhttp3.Call;
@@ -31,7 +40,7 @@ import okhttp3.Response;
 
 public class MainActivity extends AppCompatActivity {
     String twseUrl = "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=";
-    String tpexUrl  = "https://www.tpex.org.tw/web/stock/aftertrading/daily_trading_info/st43_result.php?d=";
+    String tpexUrl = "https://www.tpex.org.tw/web/stock/aftertrading/daily_trading_info/st43_result.php?d=";
     private static final String TAG = "MainActivity";
     private TextView first;
     private TextView end;
@@ -43,6 +52,7 @@ public class MainActivity extends AppCompatActivity {
     boolean getEnd = false;
 
     String number = "";
+    String year = "";
     Gson gson = new Gson();
 
     final int FIRSTPRICE = 0;
@@ -58,16 +68,20 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        Logger.addLogAdapter(new AndroidLogAdapter());
+
         findView();
 
-        TPEXlist = readAssetsJson(this,"TPEX.txt");
-        TWSElist = readAssetsJson(this,"TWSE.txt");
+        TPEXlist = readAssetsJson(this, "TPEX.txt");
+        TWSElist = readAssetsJson(this, "TWSE.txt");
 
         findViewById(R.id.button).setOnClickListener(v -> {
             number = editNumber.getText().toString();
+            year = editYear.getText().toString();
             boolean isTWSE = (TWSElist.contains(number));
-            getPrice(editYear.getText().toString(), FIRSTPRICE,isTWSE);
-            getPrice(editYear.getText().toString(), ENDPRICE,isTWSE);
+            getPrice(year, FIRSTPRICE, isTWSE);
+            getPrice(year, ENDPRICE, isTWSE);
+            new Thread(() -> jsoupGetText(number, year)).start();
         });
 
 
@@ -82,7 +96,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    private void getPrice(String YY, int type,boolean isTWSE) {
+    private void getPrice(String YY, int type, boolean isTWSE) {
 
         getFrist = false;
         getEnd = false;
@@ -90,13 +104,13 @@ public class MainActivity extends AppCompatActivity {
 
         if (isTWSE && type == FIRSTPRICE) {
             url = twseUrl + YY + "0110" + "&stockNo=" + number;
-        } else if ( isTWSE && type == ENDPRICE) {
-            url = twseUrl + YY + "1231" + "&stockNo=" + number;
-        } else if(!isTWSE && type == FIRSTPRICE) {
-            YY = String.valueOf(Integer.parseInt(YY)-1911);
+        } else if (isTWSE && type == ENDPRICE) {
+            url = twseUrl + YY + "1201" + "&stockNo=" + number;
+        } else if (!isTWSE && type == FIRSTPRICE) {
+            YY = String.valueOf(Integer.parseInt(YY) - 1911);
             url = tpexUrl + YY + "/01" + "&stkno=" + number;
-        } else if(!isTWSE && type == ENDPRICE) {
-            YY = String.valueOf(Integer.parseInt(YY)-1911);
+        } else if (!isTWSE && type == ENDPRICE) {
+            YY = String.valueOf(Integer.parseInt(YY) - 1911);
             url = tpexUrl + YY + "/12" + "&stkno=" + number;
         } else {
             return;
@@ -120,9 +134,9 @@ public class MainActivity extends AppCompatActivity {
 
                 Stock stock;
 
-                if(isTWSE) {
-                     stock = gson.fromJson(result, Twse.class);
-                }else {
+                if (isTWSE) {
+                    stock = gson.fromJson(result, Twse.class);
+                } else {
                     stock = gson.fromJson(result, Tpex.class);
                 }
                 runOnUiThread(() -> {
@@ -145,20 +159,17 @@ public class MainActivity extends AppCompatActivity {
         if (getFrist && getEnd) {
             double firstPrice = Double.parseDouble(first.getText().toString());
             double endPrice = Double.parseDouble(end.getText().toString());
-            double res = (endPrice - firstPrice) / firstPrice*100;
-            BigDecimal bd   =   new BigDecimal(res);
-            res  =  bd.setScale(2,   BigDecimal.ROUND_HALF_UP).doubleValue();
+            double res = (endPrice - firstPrice) / firstPrice * 100;
+            BigDecimal bd = new BigDecimal(res);
+            res = bd.setScale(2, BigDecimal.ROUND_HALF_UP).doubleValue();
 
 
-
-            result.setText(res+"%");
+            result.setText(res + "%");
         }
     }
 
 
-
-
-    private String readAssetsJson(Context context,String fileName) {
+    private String readAssetsJson(Context context, String fileName) {
         AssetManager assetManager = context.getAssets();
 
         try {
@@ -175,4 +186,44 @@ public class MainActivity extends AppCompatActivity {
             return null;
         }
     }
+
+
+    private void jsoupGetText(String num, String year) {
+        int CashDIndex = 2;
+        int StockDIndex = 2;
+        double cashDividend = 0.0d;
+        double StockDividend = 0.0d;
+        boolean cashDividendParsed = false ;
+        boolean stockDividendParsed = false ;
+        String url = "https://tw.stock.yahoo.com/d/s/dividend_" + num + ".html";
+        try {
+            final Document document = Jsoup.connect(url).get();
+//            Logger.d(document.outerHtml()); //印出整個HTML頁面
+            for (Element row : document.select("td > table:nth-child(2) > tbody > tr")) {
+                if (row.text().contains(year)) {
+//                    Logger.d(row.cssSelector());
+                    try {
+                        cashDividendParsed = false;
+                        stockDividendParsed = false;
+                         cashDividend = Double.parseDouble(row.getElementsByIndexEquals(2).text());
+                        cashDividendParsed = true;
+                         StockDividend = Double.parseDouble(row.getElementsByIndexEquals(5).text());
+                        stockDividendParsed = true;
+                        Logger.d("現金:" + cashDividend+ " 股票股利:" + StockDividend);
+                    } catch (NumberFormatException nfe) {
+                        Logger.d("不正常數值，進行修正");
+
+                        if(!cashDividendParsed){
+                            String dividend = row.getElementsByIndexEquals(2).text();
+                        }else ()
+                        dividend = dividend.substring(dividend.length()-5);
+                        Logger.d("現金:" + cashDividend+ " 股票股利:" + Double.parseDouble(dividend));
+                    }
+                }
+            }
+        } catch (IOException ie) {
+            Log.d(TAG, "jsoupGetText: ", ie);
+        }
+    }
+
 }
