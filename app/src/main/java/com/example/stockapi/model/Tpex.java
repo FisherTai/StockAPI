@@ -1,4 +1,4 @@
-package com.example.stockapi;
+package com.example.stockapi.model;
 
 public class Tpex implements Stock{
 
