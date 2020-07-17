@@ -51,18 +51,6 @@ import static com.example.stockapi.model.SourceApi.END_PRICE;
 import static com.example.stockapi.model.SourceApi.FIRS_TPRICE;
 
 public class MainActivity extends AppCompatActivity {
-    private static final String TAG = "MainActivity";
-    private TextView first;
-    private TextView end;
-    private TextView result;
-    private TextView tvCashDividend;
-    private TextView tvCstockDividend;
-    private EditText editNumber;
-    private EditText editYear;
-    private ProgressBar loadingbar;
-    private Button btnRequest;
-
-
 
     //Databinding
     private MainViewModel viewModel;
@@ -85,28 +73,14 @@ public class MainActivity extends AppCompatActivity {
             viewModel.showLoading();
             String number = binding.editNumber.getText().toString();
             String year = binding.editYear.getText().toString();
-//            showLoading();
             //頻繁請求會被證交所擋IP，需要延遲操作
             new Handler().postDelayed(() -> {
                 viewModel.getPrice(year, FIRS_TPRICE, number);
                 viewModel.getPrice(year, END_PRICE, number);
-            }, 3000);
+            }, 2500);
 
             new Thread(() ->viewModel.GetDividend(number, year)).start();
         });
     }
-
-//    private void findView() {
-//        tvCashDividend = findViewById(R.id.cashDividend);
-//        tvCstockDividend = findViewById(R.id.stockDividend);
-//        first = findViewById(R.id.firstPrice);
-//        end = findViewById(R.id.endPrice);
-//        result = findViewById(R.id.result);
-//        editYear = findViewById(R.id.editYear);
-//        editNumber = findViewById(R.id.editNumber);
-//        loadingbar = findViewById(R.id.loading_progress);
-//        btnRequest = findViewById(R.id.btnRequest);
-//    }
-
 
 }

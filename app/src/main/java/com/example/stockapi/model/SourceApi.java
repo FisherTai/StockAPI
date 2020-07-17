@@ -2,27 +2,16 @@ package com.example.stockapi.model;
 
 import android.content.Context;
 import android.content.res.AssetManager;
-import android.text.TextUtils;
 import android.util.Log;
-import android.widget.Toast;
-
-import com.example.stockapi.MainActivity;
-import com.google.gson.Gson;
-import com.orhanobut.logger.Logger;
 
 import org.jetbrains.annotations.NotNull;
-import org.json.JSONException;
-import org.json.JSONObject;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.util.HashMap;
-import java.util.Map;
 
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -33,11 +22,6 @@ import okhttp3.Response;
 public class SourceApi {
     private static final String TAG = "SourceApi";
 
-    HashMap<String, String> MapData = new HashMap<>();
-
-
-
-
     //控制要獲取的是哪個價格
     public static final int FIRS_TPRICE = 0;
     public static final int END_PRICE = 1;
@@ -46,11 +30,6 @@ public class SourceApi {
     private String TPEXlist;
     private String TWSElist;
 
-    //使用者輸入的資料
-    private String number = "";
-    private String year = "";
-
-
     private String url = "";
     private final String twseUrl = "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=";
     private final String tpexUrl = "https://www.tpex.org.tw/web/stock/aftertrading/daily_trading_info/st43_result.php?d=";
@@ -58,16 +37,14 @@ public class SourceApi {
 
 
     public SourceApi(Context context){
-        getStockList(context);
+        initStockList(context);
     }
 
 
     //取得上市上櫃股票清單
-    public void getStockList(Context context) {
+    private void initStockList(Context context) {
         TPEXlist = readAssetsJson(context, "TPEX.txt");
         TWSElist = readAssetsJson(context, "TWSE.txt");
-        MapData.put("TPEXlist", TWSElist);
-        MapData.put("TWSElist", TWSElist);
     }
 
     public String getTPEXlist() {
@@ -96,7 +73,7 @@ public class SourceApi {
 
         OkHttpClient client = new OkHttpClient().newBuilder().build();
         final Request request = new Request.Builder().url(url).build();
-        Log.d("AAA", "getPrice: " + request.url());
+        Log.d(TAG, "getPrice: " + request.url());
         Call call = client.newCall(request);
         call.enqueue(new Callback() {
             @Override
@@ -113,23 +90,30 @@ public class SourceApi {
 
     }
 
-
-    public void getDividend(String num, String year, SourceNetDataCallback callback) {
+    /**
+     * 爬取網頁獲得配息資料的方法，這裡爬取到整個頁面。
+     * @param num  從UI傳來的股票號碼
+     * @param callback
+     */
+    public void getDividend(String num, SourceNetDataCallback callback) {
 
         String url = "https://tw.stock.yahoo.com/d/s/dividend_" + num + ".html";
         try {
             final Document document = Jsoup.connect(url).get();
 //            Logger.d(document.outerHtml()); //印出整個HTML頁面
-            callback.SourceNetDataCallback(document);
+            callback.onGetNetData(document);
         } catch (IOException ie) {
             Log.d(TAG, "jsoupGetText: ", ie);
         }
     }
 
 
-
-
-    //取得本地asset資料
+    /**
+     * 獲得本地的資料
+     * @param context
+     * @param fileName
+     * @return
+     */
     private String readAssetsJson(Context context, String fileName) {
         AssetManager assetManager = context.getAssets();
 
@@ -149,7 +133,7 @@ public class SourceApi {
     }
 
     public interface SourceNetDataCallback {
-        void SourceNetDataCallback(Document data);
+        void onGetNetData(Document data);
     }
 
 
