@@ -51,7 +51,7 @@
                     android:id="@+id/editYear"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:ems="4"
+                    android:maxLength="4"
                     android:hint="Year"
                     android:inputType="date"
                     android:textColor="#FFFFFF"
@@ -68,7 +68,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:theme="@style/textTheme"
-                    android:ems="6"
+                    android:maxLength="6"
                     android:hint="Number"
                     android:textColor="#FFFFFF"
                     android:textColorHint="#FFFFFF"
@@ -115,7 +115,7 @@
                 <TextView
                     android:id="@+id/textView"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_height="20dp"
                     android:theme="@style/textTheme"
                     android:text="年開盤價:" />
 

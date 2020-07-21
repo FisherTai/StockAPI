@@ -1,7 +1,6 @@
 package com.example.stockapi;
 
 import android.app.Application;
-import android.text.TextUtils;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -14,7 +13,6 @@ import com.example.stockapi.model.Stock;
 import com.example.stockapi.model.Tpex;
 import com.example.stockapi.model.Twse;
 import com.google.gson.Gson;
-import com.orhanobut.logger.Logger;
 
 import org.jetbrains.annotations.NotNull;
 import org.json.JSONException;
@@ -43,17 +41,17 @@ public class MainViewModel extends AndroidViewModel {
     private SourceApi sourceApi;
 
     // 儲存獲取的資料
-    AtomicReference<Double> cashDividend = new AtomicReference<>(0.0d);
-    AtomicReference<Double> stockDividend = new AtomicReference<>(0.0d);
-    String firstPrice = "";
-    String endPrice = "";
+    private AtomicReference<Double> cashDividend = new AtomicReference<>(0.0d);
+    private AtomicReference<Double> stockDividend = new AtomicReference<>(0.0d);
+    private String firstPrice = "";
+    private String endPrice = "";
 
 
     //判断獲取完成
-    boolean getFrist = false;
-    boolean getEnd = false;
-    boolean cashDividendParsed = false;
-    boolean stockDividendParsed = false;
+    private boolean getFrist = false;
+    private boolean getEnd = false;
+    private boolean cashDividendParsed = false;
+    private boolean stockDividendParsed = false;
 
 
     private Gson gson = new Gson();
@@ -82,9 +80,8 @@ public class MainViewModel extends AndroidViewModel {
                 Stock stock;
                 try {
                     String stat = new JSONObject(result).optString("stat");
-                    if (TextUtils.isEmpty(stat) || !stat.equals("OK")) {
+                    if (isTWSE && !stat.equals("OK")) {
                         hideLoading();
-                        stat = TextUtils.isEmpty(stat) ? "資料錯誤，請檢查輸入資料" : stat;
                         tvCommon.set(stat);
                         return;
                     }
@@ -101,12 +98,12 @@ public class MainViewModel extends AndroidViewModel {
                     firstPrice = stock.getFirstPrice();
                     tvFirst.set(firstPrice);
                     getFrist = true;
-                    setResult(firstPrice, endPrice,cashDividend.get(),stockDividend.get());
+                    setResult(firstPrice, endPrice, cashDividend.get(), stockDividend.get());
                 } else {
                     endPrice = stock.getEndPrice();
                     tvEnd.set(stock.getEndPrice());
                     getEnd = true;
-                    setResult(firstPrice, endPrice,cashDividend.get(),stockDividend.get());
+                    setResult(firstPrice, endPrice, cashDividend.get(), stockDividend.get());
                 }
 
                 if (getEnd && getFrist) {
@@ -128,64 +125,60 @@ public class MainViewModel extends AndroidViewModel {
 //                    Logger.d(row.cssSelector());
 //                    Logger.d(row.text());
                     try {
-                        cashDividend.set(ParseCashDividend(row.getElementsByIndexEquals(CashDIndex).text()));
-                        stockDividend.set(ParseStockDividend(row.getElementsByIndexEquals(StockDIndex).text()));
+                        cashDividendSet(ParseCashDividend(row.getElementsByIndexEquals(CashDIndex).text()));
+                        stockDividendSet(ParseStockDividend(row.getElementsByIndexEquals(StockDIndex).text()));
+                        Log.d(TAG, "cashDividendSet: " + cashDividend.get());
+                        //輸入前設定格式
+                        tvCashDividend.set(String.valueOf(new BigDecimal(cashDividend.get()).setScale(2, BigDecimal.ROUND_HALF_UP).doubleValue()));
+                        tvStockDividend.set(String.valueOf(new BigDecimal(stockDividend.get()).setScale(2, BigDecimal.ROUND_HALF_UP).doubleValue()));
 
-
-                        tvCashDividend.set(row.getElementsByIndexEquals(CashDIndex).text());
-                        tvStockDividend.set(row.getElementsByIndexEquals(StockDIndex).text());
-
-                        Logger.d("現金:" + cashDividend + " 股票股利:" + stockDividend);
+                        Log.d(TAG, "現金:" + row.getElementsByIndexEquals(CashDIndex).text() +
+                                " 股票股利:" + row.getElementsByIndexEquals(StockDIndex).text());
                     } catch (NumberFormatException nfe) {
-                        Logger.d("不正常數值，進行修正");
+                        Log.d(TAG, "不正常數值，進行修正");
                         String dividend = "";
                         if (!cashDividendParsed) {
                             dividend = row.getElementsByIndexEquals(CashDIndex).text();
                             dividend = dividend.substring(dividend.length() - 5);
-                            cashDividend.set(ParseCashDividend(dividend));
+
+                            cashDividendSet(ParseCashDividend(dividend));
                         }
                         if (!stockDividendParsed) {
                             dividend = row.getElementsByIndexEquals(StockDIndex).text();
                             dividend = dividend.substring(dividend.length() - 5);
-                            stockDividend.set(ParseCashDividend(dividend));
-                        }
-                        final String cd = String.valueOf(cashDividend.get());
-                        final String sd = String.valueOf(stockDividend.get());
 
+                            stockDividendSet(ParseStockDividend(dividend));
+                        }
+                        final String cd = String.valueOf(new BigDecimal(cashDividend.get()).setScale(2, BigDecimal.ROUND_HALF_UP).doubleValue());
+                        final String sd = String.valueOf(new BigDecimal(stockDividend.get()).setScale(2, BigDecimal.ROUND_HALF_UP).doubleValue());
                         tvCashDividend.set(cd);
                         tvStockDividend.set(sd);
 
-                        Logger.d("現金:" + cashDividend + " 股票股利:" + stockDividend);
+                        Log.d(TAG, "GetDividend: " + "現金:" + cashDividend + " 股票股利:" + stockDividend);
                     }
                 }
             }
         });
     }
 
-
-    private void setResult(String sFirstPrice, String sEndPrice,double cashDividend , double stockDividend) {
+    /**
+     * 計算報酬率:(收盤價+現金股利-開盤價)/開盤價 + (收盤價*100*現金股利)
+     *
+     * @param sFirstPrice   開盤價:String
+     * @param sEndPrice     收盤價:String
+     * @param cashDividend  現金配息
+     * @param stockDividend 股利配息
+     */
+    private void setResult(String sFirstPrice, String sEndPrice, double cashDividend, double stockDividend) {
         if (getFrist && getEnd && cashDividendParsed && stockDividendParsed) {
             double firstPrice = Double.parseDouble(sFirstPrice);
             double endPrice = Double.parseDouble(sEndPrice);
-            double res = (endPrice + cashDividend - firstPrice) / firstPrice * 100;
+            double res = ((endPrice + cashDividend - firstPrice) + (endPrice * stockDividend * 0.1)) / (firstPrice) * 100;
             BigDecimal bd = new BigDecimal(res);
             res = bd.setScale(2, BigDecimal.ROUND_HALF_UP).doubleValue();
             result.set(res + "%");
         }
     }
-
-    private double ParseCashDividend(String cashDividend) {
-        double Parsed = Double.parseDouble(cashDividend);
-        cashDividendParsed = true;
-        return Parsed;
-    }
-
-    private double ParseStockDividend(String stockDividend) {
-        double Parsed = Double.parseDouble(stockDividend);
-        stockDividendParsed = true;
-        return Parsed;
-    }
-
 
     /**
      * 顯示讀取圖，同時初始化
@@ -203,6 +196,8 @@ public class MainViewModel extends AndroidViewModel {
         result.set("");
         tvCommon.set("");
         isLoading.set(true);
+        cashDividend = new AtomicReference<>(0.0d);
+        stockDividend = new AtomicReference<>(0.0d);
     }
 
     /**
@@ -213,4 +208,32 @@ public class MainViewModel extends AndroidViewModel {
         isLoading.set(false);
     }
 
+    /**
+     * 轉換成Double格式。
+     * 使用此方法時，需捕捉NumberFormatException進行處理
+     */
+    private double ParseCashDividend(String cashDividend) throws NumberFormatException {
+        double Parsed = Double.parseDouble(cashDividend);
+        cashDividendParsed = true;
+        return Parsed;
+    }
+
+    private double ParseStockDividend(String stockDividend) throws NumberFormatException {
+        double Parsed = Double.parseDouble(stockDividend);
+        stockDividendParsed = true;
+        return Parsed;
+    }
+
+    /**
+     * 考慮到同年多次配息的狀況，累加結果
+     *
+     * @param Temp
+     */
+    private void cashDividendSet(double Temp) {
+        cashDividend.set(cashDividend.get() + Temp);
+    }
+
+    private void stockDividendSet(double Temp) {
+        stockDividend.set(stockDividend.get() + Temp);
+    }
 }
